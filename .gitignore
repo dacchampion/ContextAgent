@@ -1,0 +1,51 @@
+# --- Entornos / dependencias ---
+.venv/
+venv/
+ENV/
+poetry.toml
+# Lock se versiona; el venv no
+# poetry.lock  <- SÍ se versiona
+
+# --- Configuración sensible ---
+.env
+*.pem
+*.key
+
+# --- Python cache ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# --- Alembic artefactos (solo cache); MIGRACIONES SÍ se versionan ---
+alembic/*cache*/ 
+
+# --- Logs / coverage / tests ---
+*.log
+logs/
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.tox/
+.cache/
+
+# --- Datos locales / artefactos ---
+*.db
+*.sqlite
+*.sqlite3
+data/
+outputs/
+notebooks/.ipynb_checkpoints/
+
+# --- Editor / OS ---
+.DS_Store
+.vscode/
+.idea/
+Thumbs.db
+
+# --- Docker (si aplicara) ---
+dist/
+build/
+*.egg-info/

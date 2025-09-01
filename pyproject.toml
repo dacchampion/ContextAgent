@@ -1,0 +1,44 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Diego Camacho",email = "diego@beetronai.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "finquery-backend"
+version = "0.1.0"
+description = "Backend API + ETL + DB schema for FinQuery"
+authors = ["Tu Nombre <tu@email>"]
+readme = "README.md"
+packages = [{ include = "app" }]
+
+[tool.poetry.dependencies]
+python = ">=3.13"
+
+# DB
+SQLAlchemy = "^2.0.32"
+alembic = "^1.13.2"
+pymysql = "^1.1.1"
+python-dotenv = "^1.0.1"
+
+# (Opcional si conectarás desde aquí a AWS RDS con SSL)
+# certifi = "^2024.2.2"
+
+# Utilidades
+pandas = "^2.2.2"
+
+[tool.poetry.group.dev.dependencies]
+ipython = "^8.26.0"
+black = "^24.8.0"
+ruff = "^0.5.6"
