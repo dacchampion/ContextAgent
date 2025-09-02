@@ -38,6 +38,9 @@ python-dotenv = "^1.0.1"
 # Utilidades
 pandas = "^2.2.2"
 
+yfinance = "^0.2.40"
+twelvedata = "^1.2.7"
+
 [tool.poetry.group.dev.dependencies]
 ipython = "^8.26.0"
 black = "^24.8.0"
