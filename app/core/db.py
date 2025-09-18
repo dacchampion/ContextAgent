@@ -1,11 +1,22 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from app.core.config import DATABASE_URL
+from typing import Generator
 
+from app.core.config import settings
+
+# Usa la propiedad calculada, que respeta tu .env por componentes o DATABASE_URL si existe
 engine = create_engine(
-    DATABASE_URL,
+    settings.sqlalchemy_database_uri,
+    echo=getattr(settings, "DEBUG_SQL", False),
     pool_pre_ping=True,
     pool_recycle=3600,
-    # future=True  # SQLA2 ya es future por defecto
 )
-SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+def get_db() -> Generator:
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
