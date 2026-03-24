@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.security import require_api_key
 from app.api.deps import DBSessionDep
-from app.models.avwap_anchor import AvwapAnchor
+from app.models.avwap_anchors import AvwapAnchors
 from app.schemas.avwap_anchor import AnchorsResponse, AnchorOut, AnchorCreate, AnchorUpdate
 
 router = APIRouter(
@@ -52,27 +52,27 @@ def list_anchors(
     cursor: Optional[str] = Query(None),
     order: str = Query("asc", pattern="^(asc|desc)$"),
 ):
-    conds = [AvwapAnchor.symbol_id == symbol_id]
+    conds = [AvwapAnchors.symbol_id == symbol_id]
     if candle_width:
-        conds.append(AvwapAnchor.candle_width == candle_width)
+        conds.append(AvwapAnchors.candle_width == candle_width)
     if anchor_type:
-        conds.append(AvwapAnchor.anchor_type == anchor_type)
+        conds.append(AvwapAnchors.anchor_type == anchor_type)
     if start_ms is not None:
-        conds.append(AvwapAnchor.anchor_ts_utc >= _ms_to_dt(start_ms))
+        conds.append(AvwapAnchors.anchor_ts_utc >= _ms_to_dt(start_ms))
     if end_ms is not None:
-        conds.append(AvwapAnchor.anchor_ts_utc < _ms_to_dt(end_ms))
+        conds.append(AvwapAnchors.anchor_ts_utc < _ms_to_dt(end_ms))
 
     after = _dec(cursor)
     if after:
         ts, aid = after
-        cmp = tuple_(AvwapAnchor.anchor_ts_utc, AvwapAnchor.anchor_id)
+        cmp = tuple_(AvwapAnchors.anchor_ts_utc, AvwapAnchors.anchor_id)
         val = tuple_((_ms_to_dt(ts), aid))
         conds.append(cmp > val if order == "asc" else cmp < val)
 
-    stmt = select(AvwapAnchor).where(and_(*conds))
+    stmt = select(AvwapAnchors).where(and_(*conds))
     stmt = stmt.order_by(
-        (asc if order == "asc" else desc)(AvwapAnchor.anchor_ts_utc),
-        (asc if order == "asc" else desc)(AvwapAnchor.anchor_id),
+        (asc if order == "asc" else desc)(AvwapAnchors.anchor_ts_utc),
+        (asc if order == "asc" else desc)(AvwapAnchors.anchor_id),
     ).limit(limit + 1)
 
     rows = db.execute(stmt).scalars().all()
@@ -102,11 +102,11 @@ def create_anchor(
 ):
     # ¿existe ya?
     from sqlalchemy import select, and_
-    exists_stmt = select(AvwapAnchor).where(and_(
-        AvwapAnchor.symbol_id == body.symbol_id,
-        AvwapAnchor.candle_width == body.candle_width,
-        AvwapAnchor.anchor_type == body.anchor_type,
-        AvwapAnchor.anchor_ts_utc == _ms_to_dt(body.anchor_ms),
+    exists_stmt = select(AvwapAnchors).where(and_(
+        AvwapAnchors.symbol_id == body.symbol_id,
+        AvwapAnchors.candle_width == body.candle_width,
+        AvwapAnchors.anchor_type == body.anchor_type,
+        AvwapAnchors.anchor_ts_utc == _ms_to_dt(body.anchor_ms),
     )).limit(1)
     existing = db.execute(exists_stmt).scalars().first()
 
@@ -139,7 +139,7 @@ def create_anchor(
         raise HTTPException(status_code=409, detail="Anchor already exists for given (symbol_id, candle_width, ts, type)")
 
     # crear nuevo
-    obj = AvwapAnchor(
+    obj = AvwapAnchors(
         symbol_id=body.symbol_id,
         candle_width=body.candle_width,
         anchor_type=body.anchor_type,
@@ -164,7 +164,7 @@ def update_anchor(
     anchor_id: int = Path(..., ge=1),
     body: AnchorUpdate = ...,
 ):
-    obj = db.get(AvwapAnchor, anchor_id)
+    obj = db.get(AvwapAnchors, anchor_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Anchor not found")
 
@@ -196,7 +196,7 @@ def update_anchor(
 
 @router.delete("/{anchor_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_anchor(db: DBSessionDep, anchor_id: int = Path(..., ge=1)):
-    obj = db.get(AvwapAnchor, anchor_id)
+    obj = db.get(AvwapAnchors, anchor_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Anchor not found")
     db.delete(obj)

@@ -1,0 +1,92 @@
+# backend/tests/test_context_builder.py
+# -*- coding: utf-8 -*-
+import os
+from datetime import datetime, timedelta
+
+import pytest
+from sqlalchemy import create_engine, text
+
+from backend.services.context_builder import build_context_json, SymbolNotFound
+
+@pytest.fixture(autouse=True)
+def _setup_db(monkeypatch):
+    url = "sqlite+pysqlite:///:memory:"
+    monkeypatch.setenv("DATABASE_URL", url)
+    engine = create_engine(url, future=True)
+    with engine.begin() as conn:
+        conn.execute(text("""
+        CREATE TABLE symbols (
+          symbol_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          symbol TEXT UNIQUE NOT NULL
+        );"""))
+        conn.execute(text("""
+        CREATE TABLE ohlcv (
+          symbol_id INTEGER NOT NULL,
+          candle_width TEXT NOT NULL,
+          timestamp_utc DATETIME(3) NOT NULL,
+          open_price REAL NOT NULL,
+          high_price REAL NOT NULL,
+          low_price  REAL NOT NULL,
+          close_price REAL NOT NULL,
+          volume REAL NULL,
+          provider_id INTEGER NOT NULL
+        );"""))
+        conn.execute(text("""
+        CREATE TABLE indicators (
+          symbol_id INTEGER NOT NULL,
+          candle_width TEXT NOT NULL,
+          timestamp_utc DATETIME(3) NOT NULL,
+          vwap REAL, ema8 REAL, ema21 REAL, ema50 REAL, sma20 REAL, sma50 REAL,
+          bb_mid REAL, bb_up REAL, bb_dn REAL, bb_percB REAL, bb_bw REAL,
+          updated_utc DATETIME(3) NOT NULL
+        );"""))
+        conn.execute(text("INSERT INTO symbols(symbol, symbol_id) VALUES ('AAPL',1)"))
+
+        # Semilla 30m (40 velas con BB en indicators)
+        base = datetime(2025, 9, 17, 0, 0, 0)
+        for i in range(40):
+            ts = base + timedelta(minutes=30*i)
+            close = 200 + i * 0.5
+            hi, lo = close + 0.4, close - 0.4
+            conn.execute(text("""
+                INSERT INTO ohlcv VALUES (1,'30m',:ts,:op,:hi,:lo,:cl,1000,1)
+            """), dict(ts=ts, op=close-0.2, hi=hi, lo=lo, cl=close))
+            conn.execute(text("""
+                INSERT INTO indicators VALUES (
+                    1,'30m',:ts,:vwap,0,:ema21,0,0,:sma50,
+                    :bb_mid,:bb_up,:bb_dn,:percB,:bw,:upd
+                )
+            """), dict(
+                ts=ts, vwap=close-0.1, ema21=199+i*0.4, sma50=198+i*0.2,
+                bb_mid=close, bb_up=close+2.0, bb_dn=close-2.0, percB=0.5, bw=0.05, upd=ts
+            ))
+
+        # 1D minimal (faltan BBs/EMA para probar None)
+        for i in range(3):
+            ts = datetime(2025, 9, 15+i)
+            close = 220 + i
+            conn.execute(text("""
+                INSERT INTO ohlcv VALUES (1,'1d',:ts,:op,:hi,:lo,:cl,1000,1)
+            """), dict(ts=ts, op=close-0.5, hi=close+0.7, lo=close-0.7, cl=close))
+            conn.execute(text("""
+                INSERT INTO indicators VALUES (1,'1d',:ts,:vwap,0,NULL,0,0,NULL,NULL,NULL,NULL,NULL,NULL,:upd)
+            """), dict(ts=ts, vwap=close-0.3, upd=ts))
+
+    yield
+
+def test_build_ok():
+    out = build_context_json("AAPL", ["30m","1D"])
+    assert out["symbol"] == "AAPL"
+    tf30 = next(t for t in out["timeframes"] if t["timeframe"] == "30m")
+    assert "levels" in tf30 and "bb" in tf30["levels"]
+    assert set(tf30["distance"].keys()) == {"to_ema21","to_sma50","to_bb_up","to_bb_dn"}
+
+def test_symbol_not_found():
+    with pytest.raises(SymbolNotFound):
+        build_context_json("NOPE", ["30m"])
+
+def test_none_levels_on_missing():
+    out = build_context_json("AAPL", ["1D"])
+    tf1d = out["timeframes"][0]
+    assert tf1d["levels"]["ma"]["ema21"] is None
+    assert tf1d["levels"]["bb"]["mid"] is None
