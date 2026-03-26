@@ -1,17 +1,22 @@
 # backend/tests/test_context_builder.py
 # -*- coding: utf-8 -*-
 import os
+import sys
 from datetime import datetime, timedelta
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 import pytest
 from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session
+import sqlite3
 
-from backend.services.context_builder import build_context_json, SymbolNotFound
+from services.context_builder import build_context_json, SymbolNotFound
 
-@pytest.fixture(autouse=True)
-def _setup_db(monkeypatch):
+sqlite3.register_adapter(datetime, lambda dt: dt.isoformat())
+
+@pytest.fixture
+def db_session():
     url = "sqlite+pysqlite:///:memory:"
-    monkeypatch.setenv("DATABASE_URL", url)
     engine = create_engine(url, future=True)
     with engine.begin() as conn:
         conn.execute(text("""
@@ -41,6 +46,14 @@ def _setup_db(monkeypatch):
           kc_mid REAL, kc_up REAL, kc_dn REAL,
           updated_utc DATETIME(3) NOT NULL
         );"""))
+        conn.execute(text("""CREATE TABLE avwap_anchors(
+            anchor_id INTEGER PRIMARY KEY,
+            symbol_id INTEGER,
+            candle_width TEXT,
+            anchor_ts_utc DATETIME,
+            anchor_type TEXT,
+            anchor_label TEXT,
+            created_utc DATETIME)"""))
         conn.execute(text("INSERT INTO symbols(symbol, symbol_id) VALUES ('AAPL',1)"))
 
         # Semilla 30m (40 velas con BB y KC en indicators)
@@ -81,11 +94,11 @@ def _setup_db(monkeypatch):
                     :upd
                 )
             """), dict(ts=ts, vwap=close-0.3, upd=ts))
+    with Session(engine) as session:
+        yield session
 
-    yield
-
-def test_build_ok():
-    out = build_context_json("AAPL", ["30m","1D"])
+def test_build_ok(db_session):
+    out = build_context_json(db_session, "AAPL", ["30m","1D"])
     assert out["symbol"] == "AAPL"
     tf30 = next(t for t in out["timeframes"] if t["timeframe"] == "30m")
     
@@ -105,12 +118,12 @@ def test_build_ok():
     assert tf30["summary_flags"]["kc_inside_bb_squeeze"] is True
 
 
-def test_symbol_not_found():
+def test_symbol_not_found(db_session):
     with pytest.raises(SymbolNotFound):
-        build_context_json("NOPE", ["30m"])
+        build_context_json(db_session, "NOPE", ["30m"])
 
-def test_none_levels_on_missing():
-    out = build_context_json("AAPL", ["1D"])
+def test_none_levels_on_missing(db_session):
+    out = build_context_json(db_session, "AAPL", ["1D"])
     tf1d = out["timeframes"][0]
     assert tf1d["levels"]["ma"]["ema21"] is None
     assert tf1d["levels"]["bb"]["mid"] is None

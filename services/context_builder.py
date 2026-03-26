@@ -151,11 +151,10 @@ def _compute_avwap_for_anchors(
     for b in bars:
         p = _typical_price(b["hi"], b["lo"], b["cl"]) if use_typical else b["cl"]
         v = b["vol"] or 0.0
-        if p is None or v is None:
-            p = b["cl"]
-            v = v or 0.0
-        num.append(num[-1] + (0.0 if (p is None or v == 0.0) else p * v))
-        den.append(den[-1] + (0.0 if v is None else v))
+
+        current_tpv = p * v if p is not None and v != 0.0 else 0.0
+        num.append(num[-1] + current_tpv)
+        den.append(den[-1] + v)
         ts_index.append(b["ts"])
 
     def find_start_idx(anchor_ts: datetime) -> int:
@@ -354,13 +353,14 @@ def _trend_bias(s: Snapshot) -> Tuple[str, List[str]]:
 def _distances(s: Snapshot) -> Dict[str, Optional[float]]:
     if s.close is None:
         return {"to_ema21": None, "to_sma50": None, "to_bb_up": None, "to_bb_dn": None, "to_kc_up": None, "to_kc_dn": None}
+    
     return {
-        "to_ema21": _safe_pct(s.close - s.ema21, s.ema21),
-        "to_sma50": _safe_pct(s.close - s.sma50, s.sma50),
-        "to_bb_up": _safe_pct(s.close - s.bb_up, s.bb_up),
-        "to_bb_dn": _safe_pct(s.close - s.bb_dn, s.bb_dn),
-        "to_kc_up": _safe_pct(s.close - s.kc_up, s.kc_up),
-        "to_kc_dn": _safe_pct(s.close - s.kc_dn, s.kc_dn),
+        "to_ema21": _safe_pct(s.close - s.ema21, s.ema21) if s.ema21 is not None else None,
+        "to_sma50": _safe_pct(s.close - s.sma50, s.sma50) if s.sma50 is not None else None,
+        "to_bb_up": _safe_pct(s.close - s.bb_up, s.bb_up) if s.bb_up is not None else None,
+        "to_bb_dn": _safe_pct(s.close - s.bb_dn, s.bb_dn) if s.bb_dn is not None else None,
+        "to_kc_up": _safe_pct(s.close - s.kc_up, s.kc_up) if s.kc_up is not None else None,
+        "to_kc_dn": _safe_pct(s.close - s.kc_dn, s.kc_dn) if s.kc_dn is not None else None,
     }
 
 def _zones(s: Snapshot, eps: float, anchored: list[dict] | None = None) -> list[dict]:

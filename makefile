@@ -1,6 +1,6 @@
 # Makefile
 
-.PHONY: install run sync-ohlcv sync-indicators
+.PHONY: install run sync-ohlcv sync-indicators test test-cov
 
 # Variables
 PYTHON = .venv/bin/python
@@ -26,3 +26,11 @@ sync-ohlcv:
 # Syncs indicators data
 sync-indicators:
 	$(UV) run python etl/calc_indicators.py --symbol $(SYMBOL) --candle-width $(CANDLE_WIDTH)
+
+# Runs tests
+test:
+	$(UV) run pytest
+
+# Runs tests with coverage report
+test-cov:
+	$(UV) run pytest --cov=app
