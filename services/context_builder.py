@@ -205,6 +205,9 @@ class Snapshot:
     bb_dn: Optional[float]
     bb_percB: Optional[float]
     bb_bw: Optional[float]
+    kc_mid: Optional[float]
+    kc_up: Optional[float]
+    kc_dn: Optional[float]
     vwap: Optional[float]
     prev_high: Optional[float]
     prev_low: Optional[float]
@@ -244,6 +247,9 @@ def _fetch_snapshot(db: Session, symbol_id: int, cw: str) -> Snapshot:
             Indicators.bb_dn,
             Indicators.bb_percB,
             Indicators.bb_bw,
+            Indicators.kc_mid,
+            Indicators.kc_up,
+            Indicators.kc_dn,
         )
         .select_from(w)
         .outerjoin(
@@ -286,6 +292,9 @@ def _fetch_snapshot(db: Session, symbol_id: int, cw: str) -> Snapshot:
         bb_dn=_to_float(last.bb_dn),
         bb_percB=_to_float(last.bb_percB),
         bb_bw=_to_float(last.bb_bw),
+        kc_mid=_to_float(last.kc_mid),
+        kc_up=_to_float(last.kc_up),
+        kc_dn=_to_float(last.kc_dn),
         vwap=_to_float(last.vwap),
         prev_high=_to_float(prev_high),
         prev_low=_to_float(prev_low),
@@ -344,12 +353,14 @@ def _trend_bias(s: Snapshot) -> Tuple[str, List[str]]:
 
 def _distances(s: Snapshot) -> Dict[str, Optional[float]]:
     if s.close is None:
-        return {"to_ema21": None, "to_sma50": None, "to_bb_up": None, "to_bb_dn": None}
+        return {"to_ema21": None, "to_sma50": None, "to_bb_up": None, "to_bb_dn": None, "to_kc_up": None, "to_kc_dn": None}
     return {
         "to_ema21": _safe_pct(s.close - s.ema21, s.ema21),
         "to_sma50": _safe_pct(s.close - s.sma50, s.sma50),
         "to_bb_up": _safe_pct(s.close - s.bb_up, s.bb_up),
         "to_bb_dn": _safe_pct(s.close - s.bb_dn, s.bb_dn),
+        "to_kc_up": _safe_pct(s.close - s.kc_up, s.kc_up),
+        "to_kc_dn": _safe_pct(s.close - s.kc_dn, s.kc_dn),
     }
 
 def _zones(s: Snapshot, eps: float, anchored: list[dict] | None = None) -> list[dict]:
@@ -358,23 +369,27 @@ def _zones(s: Snapshot, eps: float, anchored: list[dict] | None = None) -> list[
     any_avwap_above = s.close is not None and any(v is not None and v > s.close for v in avwap_vals)
     any_avwap_below = s.close is not None and any(v is not None and v < s.close for v in avwap_vals)
 
-    # resistencia por prev_high ± eps; confluencias: bb_up, (ema21+AVWAP)
+    # resistencia por prev_high ± eps; confluencias: bb_up, kc_up, (ema21+AVWAP)
     if s.prev_high is not None:
         zf, zt = s.prev_high * (1 - eps), s.prev_high * (1 + eps)
         reason = ["prev_high"]
         if s.bb_up is not None and abs(s.prev_high - s.bb_up) / s.prev_high <= eps:
             reason.append("bb_up")
+        if s.kc_up is not None and abs(s.prev_high - s.kc_up) / s.prev_high <= eps:
+            reason.append("kc_up")
         if (s.ema21 is not None and s.close is not None
                 and s.ema21 > s.close and any_avwap_above):
             reason.append("ema21+AVWAP")
         zones.append({"type": "resistance", "from": zf, "to": zt, "reason": reason})
 
-    # soporte por prev_low ± eps; confluencias: bb_dn, sma50, (ema21+AVWAP inverso opcional)
+    # soporte por prev_low ± eps; confluencias: bb_dn, kc_dn, sma50, (ema21+AVWAP inverso opcional)
     if s.prev_low is not None:
         zf, zt = s.prev_low * (1 - eps), s.prev_low * (1 + eps)
         reason = ["prev_low"]
         if s.bb_dn is not None and abs(s.prev_low - s.bb_dn) / s.prev_low <= eps:
             reason.append("bb_dn")
+        if s.kc_dn is not None and abs(s.prev_low - s.kc_dn) / s.prev_low <= eps:
+            reason.append("kc_dn")
         if s.sma50 is not None and abs(s.prev_low - s.sma50) / s.prev_low <= eps:
             reason.append("sma50")
         if (s.ema21 is not None and s.close is not None
@@ -382,14 +397,31 @@ def _zones(s: Snapshot, eps: float, anchored: list[dict] | None = None) -> list[
             reason.append("ema21+AVWAP")
         zones.append({"type": "support", "from": zf, "to": zt, "reason": reason})
 
-    if not any(z["type"] == "resistance" for z in zones) and s.bb_up is not None:
-        zones.append({"type": "resistance",
-                      "from": s.bb_up * (1 - eps), "to": s.bb_up * (1 + eps),
-                      "reason": ["bb_up"]})
-    if not any(z["type"] == "support" for z in zones) and s.bb_dn is not None:
-        zones.append({"type": "support",
-                      "from": s.bb_dn * (1 - eps), "to": s.bb_dn * (1 + eps),
-                      "reason": ["bb_dn"]})
+    if not any(z["type"] == "resistance" for z in zones):
+        reasons = []
+        res_levels = [(s.bb_up, "bb_up"), (s.kc_up, "kc_up")]
+        valid_levels = [l for l in res_levels if l[0] is not None]
+        if valid_levels:
+            level = min(valid_levels, key=lambda x: x[0])[0] # mas bajo de los techos
+            for lvl, name in valid_levels:
+                if abs(level - lvl) / level <= eps:
+                    reasons.append(name)
+            zones.append({"type": "resistance",
+                          "from": level * (1 - eps), "to": level * (1 + eps),
+                          "reason": reasons})
+
+    if not any(z["type"] == "support" for z in zones):
+        reasons = []
+        sup_levels = [(s.bb_dn, "bb_dn"), (s.kc_dn, "kc_dn")]
+        valid_levels = [l for l in sup_levels if l[0] is not None]
+        if valid_levels:
+            level = max(valid_levels, key=lambda x: x[0])[0] # mas alto de los pisos
+            for lvl, name in valid_levels:
+                if abs(level - lvl) / level <= eps:
+                    reasons.append(name)
+            zones.append({"type": "support",
+                          "from": level * (1 - eps), "to": level * (1 + eps),
+                          "reason": reasons})
     return zones
 
 def _flags(s: Snapshot, zones: List[Dict[str, Any]], eps: float) -> Dict[str, bool]:
@@ -403,17 +435,26 @@ def _flags(s: Snapshot, zones: List[Dict[str, Any]], eps: float) -> Dict[str, bo
                 near_res = True
             if z["type"] == "support" and zf <= s.close <= zt:
                 near_sup = True
+
     p20 = None
     if s.bb_bw_series:
         sorted_bw = sorted([b for b in s.bb_bw_series if _to_float(b) is not None])
         p20 = _percentile(sorted_bw, 20.0)
+    
     squeeze = bool(p20 is not None and s.bb_bw is not None and s.bb_bw <= p20)
     overext = bool(s.bb_percB is not None and (s.bb_percB > 1.0 or s.bb_percB < 0.0))
+
+    # Confluencia de squeeze: BB y KC
+    kc_inside_bb = False
+    if s.bb_up and s.bb_dn and s.kc_up and s.kc_dn:
+        kc_inside_bb = (s.kc_up < s.bb_up) and (s.kc_dn > s.bb_dn)
+
     return {
         "near_resistance": near_res,
         "near_support": near_sup,
         "squeeze_candidate": squeeze,
         "overextended_bb": overext,
+        "kc_inside_bb_squeeze": kc_inside_bb,
     }
 
 # -----------------------------
@@ -461,6 +502,7 @@ def build_context_json(db: Session, symbol: str, tfs: List[str]) -> Dict[str, An
             "ma": {"ema21": snap.ema21, "sma50": snap.sma50},
             "bb": {"mid": snap.bb_mid, "up": snap.bb_up, "dn": snap.bb_dn,
                 "percB": snap.bb_percB, "bandwidth": snap.bb_bw},
+            "kc": {"mid": snap.kc_mid, "up": snap.kc_up, "dn": snap.kc_dn},
             "vwap": {"session": snap.vwap, "anchored": anchored_list},
         }
 

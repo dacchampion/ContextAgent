@@ -38,11 +38,12 @@ def _setup_db(monkeypatch):
           timestamp_utc DATETIME(3) NOT NULL,
           vwap REAL, ema8 REAL, ema21 REAL, ema50 REAL, sma20 REAL, sma50 REAL,
           bb_mid REAL, bb_up REAL, bb_dn REAL, bb_percB REAL, bb_bw REAL,
+          kc_mid REAL, kc_up REAL, kc_dn REAL,
           updated_utc DATETIME(3) NOT NULL
         );"""))
         conn.execute(text("INSERT INTO symbols(symbol, symbol_id) VALUES ('AAPL',1)"))
 
-        # Semilla 30m (40 velas con BB en indicators)
+        # Semilla 30m (40 velas con BB y KC en indicators)
         base = datetime(2025, 9, 17, 0, 0, 0)
         for i in range(40):
             ts = base + timedelta(minutes=30*i)
@@ -54,14 +55,18 @@ def _setup_db(monkeypatch):
             conn.execute(text("""
                 INSERT INTO indicators VALUES (
                     1,'30m',:ts,:vwap,0,:ema21,0,0,:sma50,
-                    :bb_mid,:bb_up,:bb_dn,:percB,:bw,:upd
+                    :bb_mid,:bb_up,:bb_dn,:percB,:bw,
+                    :kc_mid,:kc_up,:kc_dn,
+                    :upd
                 )
             """), dict(
                 ts=ts, vwap=close-0.1, ema21=199+i*0.4, sma50=198+i*0.2,
-                bb_mid=close, bb_up=close+2.0, bb_dn=close-2.0, percB=0.5, bw=0.05, upd=ts
+                bb_mid=close, bb_up=close+2.0, bb_dn=close-2.0, percB=0.5, bw=0.05,
+                kc_mid=close, kc_up=close+1.5, kc_dn=close-1.5, # KC mas estrecho que BB
+                upd=ts
             ))
 
-        # 1D minimal (faltan BBs/EMA para probar None)
+        # 1D minimal (faltan BBs/EMA/KC para probar None)
         for i in range(3):
             ts = datetime(2025, 9, 15+i)
             close = 220 + i
@@ -69,7 +74,12 @@ def _setup_db(monkeypatch):
                 INSERT INTO ohlcv VALUES (1,'1d',:ts,:op,:hi,:lo,:cl,1000,1)
             """), dict(ts=ts, op=close-0.5, hi=close+0.7, lo=close-0.7, cl=close))
             conn.execute(text("""
-                INSERT INTO indicators VALUES (1,'1d',:ts,:vwap,0,NULL,0,0,NULL,NULL,NULL,NULL,NULL,NULL,:upd)
+                INSERT INTO indicators VALUES (
+                    1,'1d',:ts,:vwap,0,NULL,0,0,NULL,
+                    NULL,NULL,NULL,NULL,NULL,
+                    NULL,NULL,NULL,
+                    :upd
+                )
             """), dict(ts=ts, vwap=close-0.3, upd=ts))
 
     yield
@@ -78,8 +88,22 @@ def test_build_ok():
     out = build_context_json("AAPL", ["30m","1D"])
     assert out["symbol"] == "AAPL"
     tf30 = next(t for t in out["timeframes"] if t["timeframe"] == "30m")
-    assert "levels" in tf30 and "bb" in tf30["levels"]
-    assert set(tf30["distance"].keys()) == {"to_ema21","to_sma50","to_bb_up","to_bb_dn"}
+    
+    # Niveles
+    assert "levels" in tf30
+    assert "bb" in tf30["levels"] and tf30["levels"]["bb"]["up"] is not None
+    assert "kc" in tf30["levels"] and tf30["levels"]["kc"]["up"] is not None
+
+    # Distancias
+    assert set(tf30["distance"].keys()) == {"to_ema21","to_sma50","to_bb_up","to_bb_dn", "to_kc_up", "to_kc_dn"}
+    assert tf30["distance"]["to_kc_up"] is not None
+
+    # Flags
+    assert "summary_flags" in tf30
+    assert "kc_inside_bb_squeeze" in tf30["summary_flags"]
+    # Con la semilla de datos (KC < BB), el flag debe ser True
+    assert tf30["summary_flags"]["kc_inside_bb_squeeze"] is True
+
 
 def test_symbol_not_found():
     with pytest.raises(SymbolNotFound):
@@ -90,3 +114,4 @@ def test_none_levels_on_missing():
     tf1d = out["timeframes"][0]
     assert tf1d["levels"]["ma"]["ema21"] is None
     assert tf1d["levels"]["bb"]["mid"] is None
+    assert tf1d["levels"]["kc"]["mid"] is None
