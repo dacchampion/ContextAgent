@@ -58,7 +58,14 @@ def fetch_ohlcv_range(session, symbol_id: int, candle_width: str, start: str, en
     """), {"sid": symbol_id, "cw": candle_width, "start": start, "end": end, "warmup": warmup}).mappings().all()
     return pd.DataFrame(rows)
 
-def compute_core(df: pd.DataFrame, bb_period:int=20, bb_std:float=2.0) -> pd.DataFrame:
+def compute_core(
+    df: pd.DataFrame, 
+    bb_period:int=20, 
+    bb_std:float=2.0,
+    kc_period:int=20,
+    kc_atr_period:int=14,
+    kc_atr_mult:float=2.0
+) -> pd.DataFrame:
     d = df.sort_values("timestamp_utc").copy()
 
     for c in ["open_price","high_price","low_price","close_price","volume"]:
@@ -102,8 +109,24 @@ def compute_core(df: pd.DataFrame, bb_period:int=20, bb_std:float=2.0) -> pd.Dat
     d["bb_percB"] = percB
     d["bb_bw"]    = bw
 
+    # --- Keltner Channels ---
+    kc_mid = d["close_price"].ewm(span=kc_period, adjust=False).mean()
+    
+    # True Range
+    tr1 = d["high_price"] - d["low_price"]
+    tr2 = abs(d["high_price"] - d["close_price"].shift())
+    tr3 = abs(d["low_price"] - d["close_price"].shift())
+    tr = pd.DataFrame({"tr1": tr1, "tr2": tr2, "tr3": tr3}).max(axis=1)
+    
+    # Average True Range
+    atr = tr.ewm(span=kc_atr_period, adjust=False).mean()
+    
+    d["kc_mid"] = kc_mid
+    d["kc_up"]  = kc_mid + (atr * kc_atr_mult)
+    d["kc_dn"]  = kc_mid - (atr * kc_atr_mult)
+
     # Limpia inf/-inf por si acaso
-    num_cols = ["vwap","ema8","ema21","ema50","sma20","sma50","bb_mid","bb_up","bb_dn","bb_percB","bb_bw"]
+    num_cols = ["vwap","ema8","ema21","ema50","sma20","sma50","bb_mid","bb_up","bb_dn","bb_percB","bb_bw", "kc_mid", "kc_up", "kc_dn"]
     d[num_cols] = d[num_cols].replace([np.inf, -np.inf], np.nan)
 
     return d
@@ -125,7 +148,7 @@ def _none_if_nan(x):
 def upsert_indicators_wide(session, symbol_id: int, candle_width: str, df: pd.DataFrame):
     if df.empty:
         return 0
-    cols = ["vwap","ema8","ema21","ema50","sma20","sma50","bb_mid","bb_up","bb_dn","bb_percB","bb_bw"]
+    cols = ["vwap","ema8","ema21","ema50","sma20","sma50","bb_mid","bb_up","bb_dn","bb_percB","bb_bw", "kc_mid", "kc_up", "kc_dn"]
     # Fuerza numérico donde aplique y remplaza inf/-inf→NaN
     for c in cols:
         if c in df.columns:
@@ -149,6 +172,9 @@ def upsert_indicators_wide(session, symbol_id: int, candle_width: str, df: pd.Da
             "bb_dn":  _none_if_nan(r.get("bb_dn")),
             "bb_percB": _none_if_nan(r.get("bb_percB")),
             "bb_bw":    _none_if_nan(r.get("bb_bw")),
+            "kc_mid": _none_if_nan(r.get("kc_mid")),
+            "kc_up":  _none_if_nan(r.get("kc_up")),
+            "kc_dn":  _none_if_nan(r.get("kc_dn")),
         })
 
     session.execute(text("""
@@ -156,12 +182,14 @@ def upsert_indicators_wide(session, symbol_id: int, candle_width: str, df: pd.Da
         symbol_id, candle_width, timestamp_utc,
         vwap, ema8, ema21, ema50, sma20, sma50,
         bb_mid, bb_up, bb_dn, bb_percB, bb_bw,
+        kc_mid, kc_up, kc_dn,
         updated_utc
       )
       VALUES (
         :symbol_id, :candle_width, :timestamp_utc,
         :vwap, :ema8, :ema21, :ema50, :sma20, :sma50,
         :bb_mid, :bb_up, :bb_dn, :bb_percB, :bb_bw,
+        :kc_mid, :kc_up, :kc_dn,
         UTC_TIMESTAMP(3)
       )
       ON DUPLICATE KEY UPDATE
@@ -170,6 +198,7 @@ def upsert_indicators_wide(session, symbol_id: int, candle_width: str, df: pd.Da
         sma20=VALUES(sma20), sma50=VALUES(sma50),
         bb_mid=VALUES(bb_mid), bb_up=VALUES(bb_up), bb_dn=VALUES(bb_dn),
         bb_percB=VALUES(bb_percB), bb_bw=VALUES(bb_bw),
+        kc_mid=VALUES(kc_mid), kc_up=VALUES(kc_up), kc_dn=VALUES(kc_dn),
         updated_utc=UTC_TIMESTAMP(3)
     """), recs)
     session.commit()
@@ -220,6 +249,10 @@ def main():
     # Bollinger params
     ap.add_argument("--bb_period", type=int, default=20)
     ap.add_argument("--bb_std", type=float, default=2.0)
+    # Keltner params
+    ap.add_argument("--kc_period", type=int, default=20)
+    ap.add_argument("--kc_atr_period", type=int, default=14)
+    ap.add_argument("--kc_atr_mult", type=float, default=2.0)
     # Fuerza recálculo completo ignorando last_ts para este run (sin cambiar --mode)
     ap.add_argument("--force_full", action="store_true")
     args = ap.parse_args()
@@ -245,7 +278,14 @@ def main():
             print("[indicators] No hay OHLCV para calcular.")
             sys.exit(0)
 
-        core = compute_core(ohlcv, bb_period=args.bb_period, bb_std=args.bb_std)
+        core = compute_core(
+            ohlcv, 
+            bb_period=args.bb_period, 
+            bb_std=args.bb_std,
+            kc_period=args.kc_period,
+            kc_atr_period=args.kc_atr_period,
+            kc_atr_mult=args.kc_atr_mult,
+        )
         n_wide = upsert_indicators_wide(session, symbol_id, args.candle_width, core)
 
         # Series paramétricas
@@ -262,6 +302,11 @@ def main():
         upsert_indicator_series(session, symbol_id, args.candle_width, core, "BB_dn",    args.bb_period, "bb_dn",    f"Bollinger(k={args.bb_std})")
         upsert_indicator_series(session, symbol_id, args.candle_width, core, "BB_percB", args.bb_period, "bb_percB", f"Bollinger(k={args.bb_std})")
         upsert_indicator_series(session, symbol_id, args.candle_width, core, "BB_bw",    args.bb_period, "bb_bw",    f"Bollinger(k={args.bb_std})")
+        
+        # Keltner en series
+        upsert_indicator_series(session, symbol_id, args.candle_width, core, "KC_mid", args.kc_period, "kc_mid", f"Keltner(atr_p={args.kc_atr_period}, atr_m={args.kc_atr_mult})")
+        upsert_indicator_series(session, symbol_id, args.candle_width, core, "KC_up",  args.kc_period, "kc_up",  f"Keltner(atr_p={args.kc_atr_period}, atr_m={args.kc_atr_mult})")
+        upsert_indicator_series(session, symbol_id, args.candle_width, core, "KC_dn",  args.kc_period, "kc_dn",  f"Keltner(atr_p={args.kc_atr_period}, atr_m={args.kc_atr_mult})")
 
         session.execute(text("""
             INSERT INTO job_runs(job_name, symbol_id, candle_width, run_status, rows_affected, log_message)

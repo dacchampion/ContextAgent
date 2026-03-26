@@ -53,6 +53,10 @@ CREATE TABLE IF NOT EXISTS indicators (
   sma20      DECIMAL(18,6) NULL,
   sma50      DECIMAL(18,6) NULL,
 
+  kc_mid     DECIMAL(18,6) NULL,
+  kc_up      DECIMAL(18,6) NULL,
+  kc_dn      DECIMAL(18,6) NULL,
+
   updated_utc DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)),
 
   PRIMARY KEY (symbol_id, candle_width, timestamp_utc),
@@ -68,7 +72,7 @@ CREATE TABLE IF NOT EXISTS indicator_series (
   indicator_name       VARCHAR(32) NOT NULL,     
   window_size     INT NOT NULL,             
   indicator_value      DECIMAL(18,6) NOT NULL,
-  indicator_method     VARCHAR(24) NULL,         
+  indicator_method     VARCHAR(64) NULL,         
   updated_utc DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)),
 
   PRIMARY KEY (symbol_id, candle_width, timestamp_utc, indicator_name, window_size),

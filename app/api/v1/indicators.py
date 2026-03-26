@@ -69,6 +69,8 @@ def list_indicators(
             "timestamp_ms": _dt_to_ms(r.timestamp_utc),
             "vwap": r.vwap, "ema8": r.ema8, "ema21": r.ema21, "ema50": r.ema50,
             "sma20": r.sma20, "sma50": r.sma50,
+            "bb_mid": r.bb_mid, "bb_up": r.bb_up, "bb_dn": r.bb_dn, "bb_percB": r.bb_percB, "bb_bw": r.bb_bw,
+            "kc_mid": r.kc_mid, "kc_up": r.kc_up, "kc_dn": r.kc_dn,
             "updated_ms": _dt_to_ms(r.updated_utc),
         }))
 

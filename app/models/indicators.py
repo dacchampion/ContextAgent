@@ -31,6 +31,11 @@ class Indicators(Base):
     bb_percB = Column(Float, nullable=True)
     bb_bw    = Column(Float, nullable=True)
 
+    # 🔥 Keltner Channels
+    kc_mid   = Column(Float, nullable=True)
+    kc_up    = Column(Float, nullable=True)
+    kc_dn    = Column(Float, nullable=True)
+
     updated_utc = Column(DateTime(timezone=False), nullable=False)
 
     __table_args__ = (
