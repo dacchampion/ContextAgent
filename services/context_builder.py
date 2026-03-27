@@ -12,6 +12,7 @@ from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 import math
+import bisect
 
 from sqlalchemy import select, and_, desc, asc
 from sqlalchemy.orm import Session
@@ -158,17 +159,7 @@ def _compute_avwap_for_anchors(
         ts_index.append(b["ts"])
 
     def find_start_idx(anchor_ts: datetime) -> int:
-        # primer índice i tal que ts_index[i] >= anchor_ts
-        lo, hi = 0, len(ts_index) - 1
-        ans = len(ts_index)
-        while lo <= hi:
-            mid = (lo + hi) // 2
-            if ts_index[mid] >= anchor_ts:
-                ans = mid
-                hi = mid - 1
-            else:
-                lo = mid + 1
-        return ans  # puede ser len(ts_index) si anchor > last ts
+        return bisect.bisect_left(ts_index, anchor_ts)
 
     out: list[dict] = []
     for a in anchors:
@@ -424,7 +415,7 @@ def _zones(s: Snapshot, eps: float, anchored: list[dict] | None = None) -> list[
                           "reason": reasons})
     return zones
 
-def _flags(s: Snapshot, zones: List[Dict[str, Any]], eps: float) -> Dict[str, bool]:
+def _flags(s: Snapshot, zones: List[Dict[str, Any]], eps: float) -> Dict[str, Any]:
     near_res = near_sup = False
     if s.close is not None:
         for z in zones:
@@ -444,17 +435,23 @@ def _flags(s: Snapshot, zones: List[Dict[str, Any]], eps: float) -> Dict[str, bo
     squeeze = bool(p20 is not None and s.bb_bw is not None and s.bb_bw <= p20)
     overext = bool(s.bb_percB is not None and (s.bb_percB > 1.0 or s.bb_percB < 0.0))
 
-    # Confluencia de squeeze: BB y KC
-    kc_inside_bb = False
-    if s.bb_up and s.bb_dn and s.kc_up and s.kc_dn:
-        kc_inside_bb = (s.kc_up < s.bb_up) and (s.kc_dn > s.bb_dn)
+    # TTM Squeeze: Bollinger Bands inside Keltner Channels
+    bb_inside_kc = False
+    squeeze_intensity = None
+    if s.bb_up is not None and s.bb_dn is not None and s.kc_up is not None and s.kc_dn is not None:
+        bb_inside_kc = (s.bb_up < s.kc_up) and (s.bb_dn > s.kc_dn)
+        bb_w = s.bb_up - s.bb_dn
+        kc_w = s.kc_up - s.kc_dn
+        if kc_w > 0:
+            squeeze_intensity = bb_w / kc_w
 
     return {
         "near_resistance": near_res,
         "near_support": near_sup,
         "squeeze_candidate": squeeze,
         "overextended_bb": overext,
-        "kc_inside_bb_squeeze": kc_inside_bb,
+        "bb_inside_kc_squeeze": bb_inside_kc,
+        "squeeze_intensity": squeeze_intensity,
     }
 
 # -----------------------------

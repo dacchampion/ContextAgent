@@ -8,11 +8,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
-import sqlite3
 
 from services.context_builder import build_context_json, SymbolNotFound
-
-sqlite3.register_adapter(datetime, lambda dt: dt.isoformat())
 
 @pytest.fixture
 def db_session():
@@ -74,8 +71,8 @@ def db_session():
                 )
             """), dict(
                 ts=ts, vwap=close-0.1, ema21=199+i*0.4, sma50=198+i*0.2,
-                bb_mid=close, bb_up=close+2.0, bb_dn=close-2.0, percB=0.5, bw=0.05,
-                kc_mid=close, kc_up=close+1.5, kc_dn=close-1.5, # KC mas estrecho que BB
+                bb_mid=close, bb_up=close+1.5, bb_dn=close-1.5, percB=0.5, bw=0.05,
+                kc_mid=close, kc_up=close+2.0, kc_dn=close-2.0, # BB mas estrecho que KC (TTM Squeeze)
                 upd=ts
             ))
 
@@ -113,9 +110,11 @@ def test_build_ok(db_session):
 
     # Flags
     assert "summary_flags" in tf30
-    assert "kc_inside_bb_squeeze" in tf30["summary_flags"]
-    # Con la semilla de datos (KC < BB), el flag debe ser True
-    assert tf30["summary_flags"]["kc_inside_bb_squeeze"] is True
+    assert "bb_inside_kc_squeeze" in tf30["summary_flags"]
+    # Con la semilla de datos (BB < KC), el flag debe ser True
+    assert tf30["summary_flags"]["bb_inside_kc_squeeze"] is True
+    assert "squeeze_intensity" in tf30["summary_flags"]
+    assert tf30["summary_flags"]["squeeze_intensity"] == 0.75
 
 
 def test_symbol_not_found(db_session):
