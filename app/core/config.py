@@ -37,6 +37,20 @@ class Settings(BaseSettings):
     DB_NAME: str = Field(default="chartagentstore")
     DB_SSL_CA: Optional[str] = None
 
+    # --- LLM Provider Settings ---
+    LLM_PROVIDER_TYPE: str = Field(
+        default="gemini", description="The type of LLM provider to use (gemini, openai, ollama)."
+    )
+    GEMINI_API_KEY: Optional[str] = Field(None, description="API key for Google Gemini.")
+    OPENAI_API_KEY: Optional[str] = Field(None, description="API key for OpenAI.")
+    OLLAMA_BASE_URL: str = Field(
+        default="http://localhost:11434", description="Base URL for the Ollama API."
+    )
+    OLLAMA_MODEL: str = Field(
+        default="llama3", description="The name of the model to use with Ollama."
+    )
+    TWELVE_DATA_KEY: Optional[str] = Field(None, description="API key for Twelve Data.")
+
     # Puedes pasar DATABASE_URL directamente si quieres
     DATABASE_URL: Optional[str] = None
 

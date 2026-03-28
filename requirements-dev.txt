@@ -4,3 +4,4 @@ ruff~=0.5.6
 pytest
 pytest-cov
 httpx
+pytest-asyncio>=0.23.0

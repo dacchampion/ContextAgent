@@ -10,6 +10,7 @@ from etl.utils import (
     get_session, get_symbol_id, get_provider_id,
     normalize_df, upsert_ohlcv, update_sync_meta
 )
+from app.core.config import settings
 
 # Logger dedicado
 logger = logging.getLogger("recent_update")
@@ -29,7 +30,7 @@ def _estimate_needed_bars(candle_width: str, lookback_days: int) -> int:
     return 2000
 
 def fetch_td(symbol: str, candle_width: str, lookback_days: int = 3) -> pd.DataFrame:
-    td_key = os.getenv("TWELVE_DATA_KEY")
+    td_key = settings.TWELVE_DATA_KEY
     if not td_key:
         raise RuntimeError("TWELVE_DATA_KEY no está definido")
 
