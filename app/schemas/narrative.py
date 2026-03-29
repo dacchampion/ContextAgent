@@ -1,20 +1,15 @@
 from pydantic import BaseModel, Field
-from typing import List
+from app.llm.enums import NarratorType
+
+class NarrativeRequest(BaseModel):
+    symbol: str = Field(..., description="The symbol to generate the narrative for.")
+    timeframe: str = Field(..., description="The timeframe to generate the narrative for.")
+    narrator_type: NarratorType = Field(..., description="The type of narrator to use.")
 
 class NarrativeResponse(BaseModel):
     """
     Represents the structured narrative output from an LLM provider.
     """
-    summary: str = Field(..., description="A high-level summary of the market narrative.")
-    bias_score: float = Field(
-        ...,
-        ge=-1.0,
-        le=1.0,
-        description="A score from -1.0 (very bearish) to 1.0 (very bullish).",
-    )
-    key_levels: List[str] = Field(
-        default_factory=list, description="Key support and resistance levels identified."
-    )
-    risk_assessment: str = Field(
-        ..., description="An assessment of the current risks and market conditions."
-    )
+    symbol: str = Field(..., description="The symbol the narrative is for.")
+    timeframe: str = Field(..., description="The timeframe the narrative is for.")
+    narrative: str = Field(..., description="The generated narrative.")

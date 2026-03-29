@@ -7,6 +7,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from app.core.config import settings
 from app.api.v1 import api_router
 from app.api.v1.context import router as context_router
+from app.api.v1.narrative import router as narrative_router
 from app.middleware.request_id import RequestIDMiddleware
 from app.core.logging import setup_logging
 
@@ -56,6 +57,7 @@ if settings.cors_origins_list:
 
 # Montar API v1
 app.include_router(context_router)
+app.include_router(narrative_router, prefix=settings.API_V1_STR)
 app.include_router(api_router, prefix=settings.API_V1_STR)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.add_middleware(RequestIDMiddleware)

@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from services.context_builder import build_context_json, SymbolNotFound
+from app.services.context_builder import build_context_json, SymbolNotFound
 
 @pytest.fixture
 def db_session():

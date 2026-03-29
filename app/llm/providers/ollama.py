@@ -45,7 +45,9 @@ class OllamaProvider(BaseLLMProvider):
 
             response_data = response.json()
             narrative_dict = json.loads(response_data.get("response", "{}"))
-            return NarrativeResponse(**narrative_dict)
+            symbol = context_data.get("symbol", "UNKNOWN")
+            timeframe = context_data.get("timeframe", "UNKNOWN")
+            return NarrativeResponse(symbol=symbol, timeframe=timeframe, narrative=json.dumps(narrative_dict))
         except httpx.RequestError as e:
             # Handle connection errors, timeouts, etc.
             print(f"Error generating narrative with Ollama: {e}")

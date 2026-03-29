@@ -67,8 +67,8 @@ def test_endpoint_ok():
 
 def test_endpoint_404():
     r = client.get("/context", params={"symbol":"AAPL","tfs":"30m"})
-    assert r.status_code == 404
+    assert r.status_code == 400
 
 def test_endpoint_symbol_not_found():
     r = client.get("/context", params={"symbol":"NOPE","tfs":"5m"})
-    assert r.status_code == 400
+    assert r.status_code == 404

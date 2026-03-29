@@ -19,7 +19,7 @@ class OpenAIProvider(BaseLLMProvider):
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable not set.")
         self.client = AsyncOpenAI(api_key=api_key)
-        self.model = "gpt-4o"  # Or another model specified in config
+        self.model = settings.OPENAI_MODEL
 
     async def generate_narrative(self, context_data: Dict[str, Any]) -> NarrativeResponse:
         """
@@ -40,7 +40,9 @@ class OpenAIProvider(BaseLLMProvider):
             
             response_content = response.choices[0].message.content
             narrative_dict = json.loads(response_content)
-            return NarrativeResponse(**narrative_dict)
+            symbol = context_data.get("symbol", "UNKNOWN")
+            timeframe = context_data.get("timeframe", "UNKNOWN")
+            return NarrativeResponse(symbol=symbol, timeframe=timeframe, narrative=json.dumps(narrative_dict))
         except Exception as e:
             # Add robust error handling here
             print(f"Error generating narrative with OpenAI: {e}")

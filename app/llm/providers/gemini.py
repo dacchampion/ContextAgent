@@ -19,7 +19,7 @@ class GeminiProvider(BaseLLMProvider):
         if not api_key:
             raise ValueError("GEMINI_API_KEY environment variable not set.")
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-1.5-pro-latest')
+        self.model = genai.GenerativeModel(settings.GEMINI_MODEL)
 
     async def generate_narrative(self, context_data: Dict[str, Any]) -> NarrativeResponse:
         """
@@ -44,7 +44,9 @@ Here is the market data:
                 response_text = response_text[:-3]
 
             narrative_dict = json.loads(response_text.strip())
-            return NarrativeResponse(**narrative_dict)
+            symbol = context_data.get("symbol", "UNKNOWN")
+            timeframe = context_data.get("timeframe", "UNKNOWN")
+            return NarrativeResponse(symbol=symbol, timeframe=timeframe, narrative=json.dumps(narrative_dict))
         except Exception as e:
             # Add robust error handling here
             print(f"Error generating narrative with Gemini: {e}")

@@ -42,7 +42,13 @@ class Settings(BaseSettings):
         default="gemini", description="The type of LLM provider to use (gemini, openai, ollama)."
     )
     GEMINI_API_KEY: Optional[str] = Field(None, description="API key for Google Gemini.")
+    GEMINI_MODEL: str = Field(
+        default="gemini-1.5-pro-latest", description="The name of the model to use with Gemini."
+    )
     OPENAI_API_KEY: Optional[str] = Field(None, description="API key for OpenAI.")
+    OPENAI_MODEL: str = Field(
+        default="gpt-4o", description="The name of the model to use with OpenAI."
+    )
     OLLAMA_BASE_URL: str = Field(
         default="http://localhost:11434", description="Base URL for the Ollama API."
     )
