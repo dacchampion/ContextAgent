@@ -1,18 +1,27 @@
 from sqlalchemy.orm import Session
-from app.services.context_builder import build_context_json
-from app.llm.factory import LLMFactory, NarratorType
+
+from app.llm.enums import NarratorType
+from app.llm.factory import LLMFactory
 from app.schemas.narrative import NarrativeResponse
+from app.services.context_builder import build_context_json
+
 
 # Placeholder for GEX context builder
 def build_gex_context_json(db_session: Session, symbol: str):
     # In the future, this would fetch GEX data, for now, it's a placeholder
     return {"symbol": symbol, "gex_data": "some_gex_data"}
 
+
 class NarratorService:
     def __init__(self, db_session: Session):
         self.db_session = db_session
 
-    def generate_narrative(self, symbol: str, timeframe: str, narrator_type: NarratorType) -> NarrativeResponse:
+    async def generate_narrative(
+        self,
+        symbol: str,
+        timeframe: str,
+        narrator_type: NarratorType,
+    ) -> NarrativeResponse:
         # 1. Fetch the context based on the narrator type
         if narrator_type == NarratorType.TECHNICAL:
             context = build_context_json(self.db_session, symbol, [timeframe])
@@ -21,13 +30,9 @@ class NarratorService:
         else:
             raise ValueError(f"Unsupported narrator type: {narrator_type}")
 
-        # 2. Use the LLMFactory to get the narrator
-        narrator = LLMFactory.create_narrator(narrator_type)
-        narrative_text = narrator.narrate(context)
+        # Preserve selected timeframe in context for providers that map back into response.
+        context["timeframe"] = timeframe
 
-        # 3. Return the narrative in the Pydantic model
-        return NarrativeResponse(
-            symbol=symbol,
-            timeframe=timeframe,
-            narrative=narrative_text,
-        )
+        # 2. Use the LLMFactory to get the provider and generate the narrative
+        narrator = LLMFactory.create_narrator(narrator_type)
+        return await narrator.generate_narrative(context)

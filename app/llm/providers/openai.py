@@ -1,5 +1,4 @@
 # backend/app/llm/providers/openai.py
-import os
 import json
 from openai import AsyncOpenAI
 from typing import Dict, Any
@@ -25,7 +24,7 @@ class OpenAIProvider(BaseLLMProvider):
         """
         Generates a market narrative using the OpenAI API.
         """
-        # Note: This is a skeleton. Error handling and JSON parsing are simplified.
+        # Note: Keep a tolerant parser so model output formatting does not 500 the endpoint.
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
@@ -35,15 +34,31 @@ class OpenAIProvider(BaseLLMProvider):
 
 {context_data}"""}
                 ],
-                # response_format={"type": "json_object"}, # For newer models
+                response_format={"type": "json_object"},
             )
-            
-            response_content = response.choices[0].message.content
-            narrative_dict = json.loads(response_content)
+
+            response_content = (response.choices[0].message.content or "").strip()
+            if not response_content:
+                raise ValueError("OpenAI returned empty content for narrative generation.")
+
+            # First pass: expected strict JSON object.
+            try:
+                narrative_dict = json.loads(response_content)
+            except json.JSONDecodeError:
+                # Second pass: tolerate markdown code fences.
+                cleaned = response_content
+                if cleaned.startswith("```json"):
+                    cleaned = cleaned[7:]
+                elif cleaned.startswith("```"):
+                    cleaned = cleaned[3:]
+                if cleaned.endswith("```"):
+                    cleaned = cleaned[:-3]
+                cleaned = cleaned.strip()
+                narrative_dict = json.loads(cleaned)
+
             symbol = context_data.get("symbol", "UNKNOWN")
             timeframe = context_data.get("timeframe", "UNKNOWN")
             return NarrativeResponse(symbol=symbol, timeframe=timeframe, narrative=json.dumps(narrative_dict))
         except Exception as e:
-            # Add robust error handling here
             print(f"Error generating narrative with OpenAI: {e}")
             raise

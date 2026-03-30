@@ -1,5 +1,4 @@
 # backend/app/llm/providers/gemini.py
-import os
 import json
 import google.generativeai as genai
 from typing import Dict, Any
@@ -33,7 +32,7 @@ Here is the market data:
 
 {context_data}"""
             response = await self.model.generate_content_async(prompt)
-            
+
             response_text = response.text.strip()
             # Strip potential markdown formatting
             if response_text.startswith("```json"):
@@ -48,6 +47,5 @@ Here is the market data:
             timeframe = context_data.get("timeframe", "UNKNOWN")
             return NarrativeResponse(symbol=symbol, timeframe=timeframe, narrative=json.dumps(narrative_dict))
         except Exception as e:
-            # Add robust error handling here
             print(f"Error generating narrative with Gemini: {e}")
             raise

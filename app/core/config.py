@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     )
     GEMINI_API_KEY: Optional[str] = Field(None, description="API key for Google Gemini.")
     GEMINI_MODEL: str = Field(
-        default="gemini-1.5-pro-latest", description="The name of the model to use with Gemini."
+        default="gemini-2.0-flash", description="The name of the model to use with Gemini."
     )
     OPENAI_API_KEY: Optional[str] = Field(None, description="API key for OpenAI.")
     OPENAI_MODEL: str = Field(
