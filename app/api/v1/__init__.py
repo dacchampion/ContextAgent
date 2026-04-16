@@ -9,6 +9,7 @@ from .indicator_series import router as indicator_series_router
 from .anchors import router as anchors_router
 from .sync_meta import router as sync_meta_router
 from .job_runs import router as job_runs_router
+from .gex import router as gex_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -19,3 +20,4 @@ api_router.include_router(indicator_series_router)
 api_router.include_router(anchors_router)
 api_router.include_router(sync_meta_router)
 api_router.include_router(job_runs_router)
+api_router.include_router(gex_router)

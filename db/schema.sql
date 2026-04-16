@@ -123,7 +123,24 @@ CREATE TABLE IF NOT EXISTS job_runs (
   CONSTRAINT fk_jobs_symbol FOREIGN KEY (symbol_id) REFERENCES symbols(symbol_id)
 ) ENGINE=InnoDB;
 
--- 8) Semillas de proveedores
+-- 8) Snapshots de GEX (external fetches)
+CREATE TABLE IF NOT EXISTS gex_snapshots (
+  snapshot_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  symbol_id BIGINT UNSIGNED NOT NULL,
+  source VARCHAR(32) NOT NULL DEFAULT 'options_data',
+  snapshot_utc DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)),
+  zero_gamma_level DECIMAL(18,6) NULL,
+  dealer_cluster_upper DECIMAL(18,6) NULL,
+  dealer_cluster_lower DECIMAL(18,6) NULL,
+  dealer_cluster_upper_range_start DECIMAL(18,6) NULL,
+  dealer_cluster_lower_range_start DECIMAL(18,6) NULL,
+  gex_map JSON NOT NULL,
+  created_utc DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)),
+  INDEX idx_gex_snapshots_lookup (symbol_id, snapshot_utc),
+  CONSTRAINT fk_gex_snapshots_symbol FOREIGN KEY (symbol_id) REFERENCES symbols(symbol_id)
+) ENGINE=InnoDB;
+
+-- 9) Semillas de proveedores
 INSERT INTO providers (name, base_url)
 VALUES ('yfinance','https://finance.yahoo.com'),
        ('twelvedata','https://api.twelvedata.com')

@@ -51,6 +51,20 @@ class Settings(BaseSettings):
     )
     TWELVE_DATA_KEY: Optional[str] = Field(None, description="API key for Twelve Data.")
 
+    # --- External options data ---
+    OPTIONS_DASHBOARD_URL: Optional[str] = Field(
+        default=None,
+        description="Dashboard URL for the external options data provider.",
+    )
+    OPTIONS_API_BASE_URL: Optional[str] = Field(
+        default=None,
+        description="API base URL for the external options data provider.",
+    )
+    OPTIONS_STORAGE_STATE_PATH: Optional[str] = Field(
+        default=None,
+        description="Optional Playwright storage_state JSON path for an authenticated external options data session.",
+    )
+
     # Puedes pasar DATABASE_URL directamente si quieres
     DATABASE_URL: Optional[str] = None
 
